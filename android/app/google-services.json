@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "493659443550",
+    "project_id": "artisan-market-24ef5",
+    "storage_bucket": "artisan-market-24ef5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:493659443550:android:2cad13e328e854b72f3fcf",
+        "android_client_info": {
+          "package_name": "com.artisan_market"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDb9HZH6k0pxVRLrUYx5cYneftEH2Ki6FI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

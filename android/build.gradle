@@ -1,0 +1,53 @@
+
+// android/build.gradle
+
+buildscript {
+    ext {
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 35
+        targetSdkVersion = 35
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.0.20" 
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.1.1")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:$kotlinVersion")
+        classpath("com.google.gms:google-services:4.4.1")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+// 👇👇👇 THÊM ĐOẠN NÀY VÀO ĐÂY (Thay vì để cuối file) 👇👇👇
+subprojects {
+    // Kỹ thuật này an toàn hơn afterEvaluate: 
+    // "Ngay khi plugin android-library được kích hoạt thì thêm plugin compose vào"
+    project.pluginManager.withPlugin("com.android.library") {
+        // Chỉ áp dụng cho module của Stripe (để tránh ảnh hưởng module khác)
+        if (project.name.contains("stripe")) {
+            apply plugin: "org.jetbrains.kotlin.plugin.compose"
+        }
+    }
+}
+// 👆👆👆 KẾT THÚC ĐOẠN MỚI 👆👆👆
+
+allprojects {
+    repositories {
+        maven {
+            url(new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), "../android"))
+        }
+        maven {
+            url(new File(["node", "--print", "require.resolve('jsc-android/package.json')"].execute(null, rootDir).text.trim(), "../dist"))
+        }
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+    }
+}
