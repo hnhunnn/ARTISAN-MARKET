@@ -26,12 +26,24 @@ const ProductDetailScreen = () => {
   const { addToCart, cartItems } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
 
-  const { product } = route.params as { product: Product };
+  // Ép kiểu product nhận thêm trường discount (nếu chưa có trong type Product)
+  const { product } = route.params as {
+    product: Product & { discount?: number };
+  };
   const [quantity, setQuantity] = useState(1);
 
   // State lưu danh sách đánh giá
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
+
+  // --- [MỚI] TÍNH TOÁN GIÁ KHUYẾN MÃI ---
+  const discount = product.discount || 0; // Lấy % giảm giá (mặc định 0)
+  const hasDiscount = discount > 0;
+  // Tính giá sau khi giảm
+  const finalPrice = hasDiscount
+    ? product.price * (1 - discount / 100)
+    : product.price;
+  // -------------------------------------
 
   const isLiked = isInWishlist(product.id);
   const totalCartItems = cartItems.reduce(
@@ -53,8 +65,6 @@ const ProductDetailScreen = () => {
             id: doc.id,
             ...doc.data(),
           }));
-          // Lưu vào state tạm hoặc gộp luôn nếu không dùng nguồn order cũ
-          // Ở đây mình sẽ giả định là dùng nguồn reviews chính là chủ yếu
           setReviews(
             list.sort(
               (a: any, b: any) =>
@@ -65,10 +75,6 @@ const ProductDetailScreen = () => {
         },
         error => console.log('Lỗi review chuẩn:', error),
       );
-
-    // Nếu bạn muốn hỗ trợ cả đơn hàng cũ (orders collection) thì giữ lại logic cũ
-    // Nhưng với dữ liệu mới bạn cung cấp (có adminReply), nó nằm trong collection nào thì code này sẽ lấy từ đó.
-    // Code này đang ưu tiên lấy từ collection 'reviews'.
 
     return () => {
       unsub1();
@@ -86,6 +92,7 @@ const ProductDetailScreen = () => {
       return;
     }
     for (let i = 0; i < quantity; i++) {
+      // Lưu ý: Nếu logic giỏ hàng cần giá mới, bạn cần update context addToCart để nhận giá finalPrice
       addToCart(product);
     }
   };
@@ -130,6 +137,15 @@ const ProductDetailScreen = () => {
             source={{ uri: product.imageUrl }}
             style={styles.productImage}
           />
+
+          {/* --- [MỚI] BADGE GIẢM GIÁ TRÊN ẢNH --- */}
+          {hasDiscount && (
+            <View style={styles.saleBadgeImage}>
+              <Text style={styles.saleBadgeText}>-{discount}%</Text>
+              <Text style={styles.saleBadgeLabel}>SALE</Text>
+            </View>
+          )}
+          {/* ------------------------------------ */}
 
           <TouchableOpacity
             style={styles.backButton}
@@ -185,6 +201,7 @@ const ProductDetailScreen = () => {
 
           <Text style={styles.productName}>{product.name}</Text>
 
+          {/* --- [CHỈNH SỬA] PHẦN HIỂN THỊ GIÁ --- */}
           <View
             style={{
               flexDirection: 'row',
@@ -192,11 +209,31 @@ const ProductDetailScreen = () => {
               alignItems: 'center',
             }}
           >
-            <Text style={styles.productPrice}>
-              {product.price.toLocaleString('vi-VN')} đ
-            </Text>
+            {hasDiscount ? (
+              // Nếu có giảm giá: Hiện giá cũ gạch ngang + giá mới
+              <View>
+                <Text style={styles.originalPrice}>
+                  {product.price.toLocaleString('vi-VN')} đ
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.productPrice}>
+                    {finalPrice.toLocaleString('vi-VN')} đ
+                  </Text>
+                  <View style={styles.smallSaleTag}>
+                    <Text style={styles.smallSaleText}>-{discount}%</Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              // Nếu không giảm giá: Hiện giá bình thường (giữ nguyên code cũ)
+              <Text style={styles.productPrice}>
+                {product.price.toLocaleString('vi-VN')} đ
+              </Text>
+            )}
+
             <Text style={styles.stockText}>Kho: {product.quantity ?? 0}</Text>
           </View>
+          {/* --------------------------------------- */}
 
           <View style={styles.divider} />
 
@@ -271,7 +308,7 @@ const ProductDetailScreen = () => {
                       : ''}
                   </Text>
 
-                  {/* --- [MỚI] ADMIN REPLY (HIỂN THỊ NẾU CÓ) --- */}
+                  {/* --- ADMIN REPLY --- */}
                   {review.adminReply && (
                     <View style={styles.adminReplyBox}>
                       <View style={styles.adminReplyHeader}>
@@ -319,6 +356,52 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 20 },
   imageContainer: { width: '100%', height: 350, backgroundColor: '#f0f0f0' },
   productImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+
+  // --- [MỚI] STYLES CHO BADGE GIẢM GIÁ ---
+  saleBadgeImage: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    backgroundColor: '#D32F2F', // Màu đỏ đậm
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    elevation: 5,
+    zIndex: 10,
+  },
+  saleBadgeText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  saleBadgeLabel: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  originalPrice: {
+    fontSize: 16,
+    color: '#999',
+    textDecorationLine: 'line-through', // Gạch ngang giá cũ
+    marginBottom: 2,
+  },
+  smallSaleTag: {
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  smallSaleText: {
+    color: '#D32F2F',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  // ----------------------------------------
 
   backButton: {
     position: 'absolute',
@@ -495,7 +578,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  // [MỚI] Styles cho Admin Reply
+  // Styles cho Admin Reply
   adminReplyBox: {
     marginTop: 10,
     backgroundColor: '#F5F5F5',

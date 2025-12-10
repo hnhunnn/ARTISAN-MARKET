@@ -9,13 +9,21 @@ import {
   DocumentData,
   addDoc,
   serverTimestamp,
+  // Import Firestore fieldPath để truy vấn theo ID
+  FieldPath,
+  // Import các hàm cần thiết cho Modular V9
+  updateDoc,
+  increment,
+  QuerySnapshot,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-// ✅ FIX HOÀN CHỈNH: Tạo đơn hàng có userId (KHỚP FIRESTORE RULES)
+// LƯU Ý: ĐÃ LOẠI BỎ IMPORT firestore DƯ THỪA ĐỂ TRÁNH TRÙNG LẶP SDK
+
+// ======================= ORDER =======================
+
 export const createOrder = async (orderData: {
-  userId: string; // ✅ BẮT BUỘC
+  userId: string;
   customerName: string;
   phone: string;
   address: string;
@@ -23,6 +31,7 @@ export const createOrder = async (orderData: {
   items: any[];
 }) => {
   try {
+    // Dùng Modular V9: addDoc(collection(db, 'orders'), ...)
     const orderRef = await addDoc(collection(db, 'orders'), {
       ...orderData,
       status: 'pending',
@@ -48,6 +57,7 @@ export interface Product {
   category: string;
   quantity: number;
   description?: string;
+  discount?: number; // Đã thêm trường discount
 }
 
 export const fetchProductsFromFirestore = async (
@@ -55,16 +65,20 @@ export const fetchProductsFromFirestore = async (
 ): Promise<Product[]> => {
   try {
     const productsCollection = collection(db, 'products');
-    let productsQuery: any = productsCollection;
+    let productsQuery: any;
 
     if (categoryId && categoryId !== 'all') {
       productsQuery = query(
         productsCollection,
         where('category', '==', categoryId),
       );
+    } else {
+      productsQuery = query(productsCollection);
     }
 
-    const productSnapshot = await getDocs(productsQuery);
+    const productSnapshot = (await getDocs(
+      productsQuery,
+    )) as QuerySnapshot<DocumentData>;
     if (productSnapshot.empty) return [];
 
     const productsList: Product[] = productSnapshot.docs.map(doc => {
@@ -81,6 +95,7 @@ export const fetchProductsFromFirestore = async (
         description:
           data.description ||
           'Sản phẩm thủ công mỹ nghệ tinh xảo, chất lượng cao.',
+        discount: data.discount || 0, // Lấy giá trị discount
       };
     });
 
@@ -91,16 +106,57 @@ export const fetchProductsFromFirestore = async (
   }
 };
 
-export const getUserInfo = async () => {
+// --- [PHẦN GIỮ NGUYÊN THEO YÊU CẦU] Lấy thông tin chi tiết của sản phẩm theo danh sách IDs ---
+// *Lưu ý: Hàm này vẫn sử dụng firestore() cũ để giữ nguyên logic truy vấn trước đó.*
+import firestore from '@react-native-firebase/firestore';
+export const fetchProductsByIds = async (ids: string[]): Promise<Product[]> => {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  // Lưu ý: Firestore chỉ cho phép tối đa 10 phần tử trong truy vấn 'in'
+  if (ids.length > 10) {
+    console.warn(
+      'CẢNH BÁO: IDs list quá dài (>10), chỉ truy vấn 10 ID đầu tiên.',
+    );
+    ids = ids.slice(0, 10);
+  }
+
   try {
-    const user = auth().currentUser;
+    // Tạo truy vấn sử dụng firestore() Native SDK
+    const productsRef = firestore().collection('products');
+    const snapshot = await productsRef
+      .where(firestore.FieldPath.documentId(), 'in', ids)
+      .get();
 
-    if (!user) {
-      console.error('❌ Chưa đăng nhập Firebase');
-      return null;
-    }
+    const products: Product[] = snapshot.docs.map(doc => {
+      const data = doc.data() as Omit<Product, 'id'>;
+      return {
+        id: doc.id,
+        ...data,
+        discount: data.discount || 0, // Đảm bảo lấy discount
+      } as Product;
+    });
 
-    const userDocRef = doc(db, 'users', user.uid);
+    // Sắp xếp lại kết quả theo thứ tự IDs nhận từ API AI
+    const sortedProducts = ids
+      .map(id => products.find(p => p.id === id))
+      .filter((p): p is Product => p !== undefined);
+
+    return sortedProducts;
+  } catch (error) {
+    console.error('Lỗi khi fetch sản phẩm theo IDs:', error);
+    return [];
+  }
+};
+
+// ======================= USER =======================
+
+export const getUserInfo = async (uid: string) => {
+  // Dùng UID đã truyền từ HomeScreen
+  try {
+    // Dùng Modular V9: doc(db, 'users', uid)
+    const userDocRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userDocRef);
 
     if (userSnap.exists()) {
@@ -113,22 +169,22 @@ export const getUserInfo = async () => {
     return null;
   }
 };
-// --- [MỚI] Hàm trừ số lượng tồn kho sau khi mua ---
+
+// --- Hàm trừ số lượng tồn kho sau khi mua ---
 export const reduceStockAfterPurchase = async (cartItems: any[]) => {
   try {
-    const batch = firestore().batch(); // Tạo một lô lệnh ghi
+    const batch = writeBatch(db); // Dùng Modular V9
 
     cartItems.forEach(item => {
-      const productRef = firestore().collection('products').doc(item.id);
+      const productRef = doc(db, 'products', item.id); // Dùng Modular V9
 
-      // Dùng FieldValue.increment(-soluong) để trừ an toàn
-      // Cách này tốt hơn là đọc về rồi trừ, vì tránh được lỗi khi nhiều người mua cùng lúc
+      // Dùng Modular V9: increment(-soluong)
       batch.update(productRef, {
-        quantity: firestore.FieldValue.increment(-item.quantity),
+        quantity: increment(-item.quantity),
       });
     });
 
-    await batch.commit(); // Thực thi tất cả lệnh cùng lúc
+    await batch.commit();
     console.log('Đã cập nhật kho thành công!');
     return true;
   } catch (error) {
@@ -137,7 +193,7 @@ export const reduceStockAfterPurchase = async (cartItems: any[]) => {
   }
 };
 
-// ======================= SEED DATABASE =======================
+// ======================= UTILITY & SEED =======================
 
 export const seedDatabase = async () => {
   try {
@@ -151,6 +207,7 @@ export const seedDatabase = async () => {
         quantity: 50,
         description:
           'Lục bình gốm sứ nung 1300 độ C, vẽ tay nghệ nhân Bát Tràng.',
+        discount: 10,
       },
       {
         name: 'Thảm Dệt Sợi Mây Tre',
@@ -160,6 +217,7 @@ export const seedDatabase = async () => {
         category: 'weaving',
         quantity: 30,
         description: 'Thảm từ 100% mây tre tự nhiên, thân thiện môi trường.',
+        discount: 0,
       },
     ];
 
@@ -203,6 +261,7 @@ export const addProductToFirestore = async (productData: any) => {
     await addDoc(collection(db, 'products'), {
       ...productData,
       rating: 5.0,
+      discount: productData.discount ?? 0,
     });
     return true;
   } catch (error) {

@@ -4,7 +4,7 @@ const app = express();
 const cors = require('cors');
 // === CHỖ NÀY QUAN TRỌNG: Thay mã Secret Key của bạn vào đây ===
 // Mã bắt đầu bằng "sk_test_..." lấy từ Stripe Dashboard
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')('');
 
 app.use(cors());
 app.use(express.json());

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 // Khắc phục cảnh báo: Chỉ bóc tách (destructuring) biến 'width' vì 'height' không được sử dụng
-const {  } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 // Để đảm bảo code chạy, tôi sẽ tạm dùng Text cho Icon mũi tên
 const BackIcon = () => (
@@ -19,8 +19,7 @@ const BackIcon = () => (
 );
 
 // Tối ưu hóa prop: Nếu bạn không sử dụng 'navigation' trong file này, chỉ cần để trống hoặc loại bỏ nó.
-// Tôi sẽ để trống prop như yêu cầu của bạn (const AddProductScreen: React.FC = ({}: any) => {)
-const AddProductScreen: React.FC = ({ }: any) => {
+const AddProductScreen: React.FC = ({}: any) => {
   const handleGoBack = () => {
     // Nếu bạn có React Navigation: navigation.goBack();
     console.log('Quay lại Trang chủ');
@@ -29,6 +28,7 @@ const AddProductScreen: React.FC = ({ }: any) => {
   const handleAddProduct = () => {
     console.log('Đã nhấn nút Thêm Sản Phẩm');
     // Logic xử lý upload sản phẩm
+    // LƯU Ý: Phải đảm bảo trường Discount được thu thập và gửi đi
   };
 
   return (
@@ -45,7 +45,6 @@ const AddProductScreen: React.FC = ({ }: any) => {
         {/* Form Nội dung (có thể cuộn) */}
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.formCard}>
-            
             {/* Tên sản phẩm */}
             <Text style={styles.label}>Tên sản phẩm</Text>
             <TextInput
@@ -53,21 +52,34 @@ const AddProductScreen: React.FC = ({ }: any) => {
               placeholder="Ví dụ: Bình gốm thủ công Bát Tràng"
             />
 
-            {/* Giá và Số lượng (Chia đôi) */}
+            {/* Giá, Số lượng, và GIẢM GIÁ (Chia thành 3 cột) */}
             <View style={styles.row}>
-              <View style={styles.halfInputContainer}>
+              {/* Giá */}
+              <View style={styles.thirdInputContainer}>
                 <Text style={styles.label}>Giá (VNĐ)</Text>
                 <TextInput
-                  style={styles.halfInput}
+                  style={styles.thirdInput}
                   placeholder="250000"
                   keyboardType="numeric"
                 />
               </View>
-              <View style={styles.halfInputContainer}>
+
+              {/* Số lượng */}
+              <View style={styles.thirdInputContainer}>
                 <Text style={styles.label}>Số lượng</Text>
                 <TextInput
-                  style={styles.halfInput}
+                  style={styles.thirdInput}
                   placeholder="10"
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* MÃ GIẢM GIÁ (%) */}
+              <View style={styles.thirdInputContainer}>
+                <Text style={styles.label}>Giảm giá (%)</Text>
+                <TextInput
+                  style={styles.thirdInput}
+                  placeholder="15"
                   keyboardType="numeric"
                 />
               </View>
@@ -75,7 +87,10 @@ const AddProductScreen: React.FC = ({ }: any) => {
 
             {/* Danh mục (Dropdown Placeholder) */}
             <Text style={styles.label}>Danh mục</Text>
-            <TouchableOpacity style={styles.dropdownInput} onPress={() => console.log('Chọn Danh mục')}>
+            <TouchableOpacity
+              style={styles.dropdownInput}
+              onPress={() => console.log('Chọn Danh mục')}
+            >
               <Text style={styles.dropdownPlaceholder}>Chọn danh mục</Text>
               <Text style={styles.dropdownIcon}>▼</Text>
             </TouchableOpacity>
@@ -89,7 +104,10 @@ const AddProductScreen: React.FC = ({ }: any) => {
 
             {/* Biểu tượng sản phẩm (Dropdown Placeholder) */}
             <Text style={styles.label}>Biểu tượng sản phẩm</Text>
-            <TouchableOpacity style={styles.dropdownInput} onPress={() => console.log('Chọn Biểu tượng')}>
+            <TouchableOpacity
+              style={styles.dropdownInput}
+              onPress={() => console.log('Chọn Biểu tượng')}
+            >
               <Text style={styles.dropdownPlaceholder}>Chọn biểu tượng</Text>
               <Text style={styles.dropdownIcon}>▼</Text>
             </TouchableOpacity>
@@ -102,21 +120,20 @@ const AddProductScreen: React.FC = ({ }: any) => {
               multiline
               numberOfLines={4}
             />
-          </View> 
-          
-          {/* LƯU Ý: Nút Thêm Sản Phẩm đã được chuyển xuống ngoài ScrollView */}
-          
+          </View>
+          <View style={{ height: 120 }} />{' '}
+          {/* Thêm khoảng trống cho nút cố định */}
         </ScrollView>
 
         {/* NÚT THÊM SẢN PHẨM (CỐ ĐỊNH) */}
-        <TouchableOpacity 
-          style={styles.fixedSubmitButton} 
+        <TouchableOpacity
+          style={styles.fixedSubmitButton}
           onPress={handleAddProduct}
         >
           <Text style={styles.submitButtonText}>Thêm Sản Phẩm</Text>
         </TouchableOpacity>
-        
-        {/* Bottom Tab Bar */}
+
+        {/* Bottom Tab Bar (Giữ nguyên) */}
         <View style={styles.bottomTabBar}>
           <TouchableOpacity style={styles.tabItem}>
             <Text style={styles.tabIcon}>🏠</Text>
@@ -142,7 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F7F7',
   },
   header: {
-    backgroundColor: '#DB4437',
+    backgroundColor: '#FF6F00', // Đã sửa màu header
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
@@ -164,7 +181,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 20, // Đã giảm padding vì nút cố định nằm ngoài
     backgroundColor: '#F7F7F7',
   },
   formCard: {
@@ -204,10 +220,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  halfInputContainer: {
-    width: '48%',
+  // [MỚI] Sửa lại kích thước cho 3 cột
+  thirdInputContainer: {
+    width: '31%', // Đảm bảo tổng cộng khoảng 93% để chừa khoảng trống
   },
-  halfInput: {
+  thirdInput: {
     height: 50,
     backgroundColor: '#FFF',
     borderRadius: 10,
@@ -216,6 +233,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     fontSize: 16,
   },
+  // [ĐÃ XÓA] halfInputContainer và halfInput
+
   dropdownInput: {
     width: '100%',
     height: 50,
@@ -239,7 +258,7 @@ const styles = StyleSheet.create({
   // Style Nút cố định ở cuối màn hình (trên Tab Bar)
   fixedSubmitButton: {
     backgroundColor: '#FF6F00', // Màu cam
-    width: '90%', 
+    width: '90%',
     height: 55,
     borderRadius: 10,
     justifyContent: 'center',
@@ -252,7 +271,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 6,
-    zIndex: 10, 
+    zIndex: 10,
   },
   submitButtonText: {
     color: 'white',

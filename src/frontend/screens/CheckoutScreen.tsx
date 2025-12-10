@@ -14,14 +14,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useCart } from '../context/CartContext';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native'; // <-- THÊM useRoute
 import { useStripe } from '@stripe/stripe-react-native';
 
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
 // --- [MỚI] Import hàm trừ kho từ backend service ---
-// Đảm bảo bạn đã thêm hàm này vào productService.ts như bước trước
 import { reduceStockAfterPurchase } from '../../backend/productService';
 
 const BackIcon = () => <Text style={styles.backIcon}>{'<'}</Text>;
@@ -31,11 +30,18 @@ const IconText = ({ icon }: { icon: string }) => (
 
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>(); // <--- SỬ DỤNG useRoute
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(false);
 
-  const { cartItems, getTotalPrice, clearCart } = useCart();
-  const totalAmount = getTotalPrice();
+  const { clearCart } = useCart();
+
+  // LẤY DỮ LIỆU ĐÃ LỌC TỪ NAVIGATION PARAMS
+  const { cartItems: selectedCartItems, totalAmount: totalAmount } =
+    route.params;
+
+  const cartItems = selectedCartItems; // Đặt tên lại cho dễ dùng trong component
+  // totalAmount đã được tính toán chính xác trên CartScreen
 
   const [shippingName, setShippingName] = useState('');
   const [shippingPhone, setShippingPhone] = useState('');
@@ -74,7 +80,6 @@ const CheckoutScreen: React.FC = () => {
   // --- HÀM 1: GỌI API LẤY KEY STRIPE ---
   const fetchPaymentSheetParams = async () => {
     try {
-      // ⚠️ IP: 10.0.2.2 cho máy ảo Android, IP LAN cho máy thật
       const API_URL = 'http://10.0.2.2:3000/payment-sheet';
 
       console.log(`[STEP 4] Đang gọi API tới: ${API_URL}`);
@@ -115,6 +120,7 @@ const CheckoutScreen: React.FC = () => {
       phone: shippingPhone,
       address: shippingAddress,
       totalPrice: totalAmount,
+      // DÙNG DỮ LIỆU ĐÃ LỌC TỪ NAVIGATION (selectedCartItems)
       items: cartItems,
     };
 
@@ -177,7 +183,7 @@ const CheckoutScreen: React.FC = () => {
       const saved = await saveOrderToFirebase();
 
       if (saved) {
-        // 5. [MỚI] Trừ kho sau khi lưu đơn thành công
+        // 5. [MỚI] Trừ kho sau khi lưu đơn thành công (SỬ DỤNG DỮ LIỆU ĐÃ LỌC)
         await reduceStockAfterPurchase(cartItems);
 
         setLoading(false);
@@ -185,7 +191,7 @@ const CheckoutScreen: React.FC = () => {
           {
             text: 'OK',
             onPress: () => {
-              clearCart();
+              clearCart(); // Chỉ xóa các mục đã chọn (Logic đã sửa trong Context)
               navigation.navigate('Home');
             },
           },
@@ -228,7 +234,7 @@ const CheckoutScreen: React.FC = () => {
       const saved = await saveOrderToFirebase();
 
       if (saved) {
-        // 2. [MỚI] Trừ kho ngay lập tức
+        // 2. [MỚI] Trừ kho ngay lập tức (SỬ DỤNG DỮ LIỆU ĐÃ LỌC)
         await reduceStockAfterPurchase(cartItems);
 
         setLoading(false);
@@ -241,7 +247,7 @@ const CheckoutScreen: React.FC = () => {
             {
               text: 'OK',
               onPress: () => {
-                clearCart();
+                clearCart(); // Chỉ xóa các mục đã chọn (Logic đã sửa trong Context)
                 navigation.navigate('Home');
               },
             },
@@ -280,25 +286,46 @@ const CheckoutScreen: React.FC = () => {
                   Đơn Hàng ({cartItems.length})
                 </Text>
               </View>
-              {cartItems.map(item => (
-                <View key={item.id} style={styles.orderItem}>
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.orderItemImage}
-                  />
-                  <View style={styles.orderItemDetails}>
-                    <Text style={styles.orderItemName}>{item.name}</Text>
-                    <Text style={styles.orderItemQuantity}>
-                      x {item.quantity}
-                    </Text>
+              {cartItems.map(item => {
+                // LOGIC TÍNH GIÁ ĐÃ GIẢM
+                const discountRate = item.discount ? item.discount / 100 : 0;
+                const finalPriceUnit = item.price * (1 - discountRate);
+                const totalItemPrice = finalPriceUnit * item.quantity;
+                const hasDiscount = item.discount > 0;
+
+                return (
+                  <View key={item.id} style={styles.orderItem}>
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.orderItemImage}
+                    />
+                    <View style={styles.orderItemDetails}>
+                      <Text style={styles.orderItemName}>{item.name}</Text>
+                      <Text style={styles.orderItemQuantity}>
+                        x {item.quantity}
+                      </Text>
+                      {hasDiscount && (
+                        <Text style={styles.orderItemDiscount}>
+                          Giảm giá: {item.discount}%
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      {hasDiscount && (
+                        <Text style={styles.originalPriceItem}>
+                          {(item.price * item.quantity).toLocaleString('vi-VN')}{' '}
+                          đ
+                        </Text>
+                      )}
+                      <Text style={styles.orderItemPrice}>
+                        {totalItemPrice.toLocaleString('vi-VN')} đ
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.orderItemPrice}>
-                    {(item.price * item.quantity).toLocaleString('vi-VN')} đ
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
               <View style={styles.orderTotal}>
-                <Text style={styles.orderTotalText}>Tổng:</Text>
+                <Text style={styles.orderTotalText}>Tổng thanh toán:</Text>
                 <Text style={styles.orderTotalPrice}>
                   {totalAmount.toLocaleString('vi-VN')} đ
                 </Text>
@@ -405,7 +432,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F7F7' },
   container: { flex: 1, backgroundColor: '#F7F7F7' },
   header: {
-    backgroundColor: '#DB4437',
+    backgroundColor: '#FF6F00', // Đã sửa màu header
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -415,7 +442,7 @@ const styles = StyleSheet.create({
   backButton: { marginRight: 15 },
   backIcon: { fontSize: 24, color: 'white', fontWeight: 'bold' },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: 'white' },
-  headerSubtitle: { fontSize: 13, color: '#E0BFEA' },
+  headerSubtitle: { fontSize: 13, color: '#FFD59A' }, // Màu phụ đề
   scrollContent: { padding: 15 },
   card: {
     backgroundColor: 'white',
@@ -445,7 +472,18 @@ const styles = StyleSheet.create({
   orderItemDetails: { flex: 1 },
   orderItemName: { fontSize: 14, fontWeight: '500', color: '#333' },
   orderItemQuantity: { fontSize: 13, color: '#777' },
-  orderItemPrice: { fontSize: 14, fontWeight: 'bold', color: '#DB4437' },
+
+  // [MỚI] STYLE CHO GIẢM GIÁ VÀ GIÁ GỐC
+  orderItemDiscount: { fontSize: 13, color: '#DB4437', fontWeight: '600' },
+  originalPriceItem: {
+    fontSize: 12,
+    color: '#999',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
+  orderItemPrice: { fontSize: 16, fontWeight: 'bold', color: '#DB4437' },
+  // ------------------------------------
+
   orderTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -480,7 +518,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
   },
-  paymentOptionSelected: { borderColor: '#DB4437', backgroundColor: '#F3E5F5' },
+  paymentOptionSelected: { borderColor: '#FF6F00', backgroundColor: '#FFF3E0' }, // Đã sửa màu
   radio: {
     width: 20,
     height: 20,
@@ -495,7 +533,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#DB4437',
+    backgroundColor: '#FF6F00', // Đã sửa màu
   },
   paymentMethodTitle: { fontSize: 14, fontWeight: '600', color: '#333' },
   footerContainer: {
@@ -509,7 +547,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#eee',
   },
   fixedPlaceOrderButton: {
-    backgroundColor: '#DB4437',
+    backgroundColor: '#FF6F00', // Đã sửa màu
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',

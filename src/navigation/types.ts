@@ -22,7 +22,6 @@ export interface Product {
   // Bổ sung các trường có thể bị thiếu
 }
 
-
 // Định nghĩa danh sách Routes và tham số (Param List)
 export type RootStackParamList = {
   Home: undefined;
@@ -31,7 +30,7 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   // ProductDetail nhận tham số product
-  ProductDetail: { product: Product }; 
+  ProductDetail: { product: Product };
   // Checkout được định nghĩa để nhận 2 tham số này (KHẮC PHỤC LỖI TS2345)
-  Checkout: { cartItems: CartItem[]; totalAmount: number }; 
+  Checkout: { cartItems: CartItem[]; totalAmount: number };
 };

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-// Định nghĩa kiểu dữ liệu sản phẩm trong giỏ
+// Định nghĩa kiểu dữ liệu sản phẩm trong giỏ (ĐÃ THÊM discount VÀ isSelected)
 export interface CartItem {
   id: string;
   name: string;
@@ -10,15 +10,20 @@ export interface CartItem {
   image: any;
   quantity: number;
   category?: string;
+  discount?: number;
+  imageUrl?: string;
+  isSelected?: boolean; // <--- TRƯỜNG MỚI: Trạng thái chọn mua
 }
 
 interface CartContextType {
   cartItems: CartItem[];
   addToCart: (item: any) => void;
-  decreaseQuantity: (itemId: string) => void; // Hàm giảm số lượng
+  decreaseQuantity: (itemId: string) => void;
   removeFromCart: (itemId: string) => void;
   clearCart: () => void;
-  getTotalPrice: () => number;
+  getTotalPrice: (items?: CartItem[]) => number; // Hàm tính tổng tiền (có thể nhận danh sách lọc)
+  toggleItemSelection: (itemId: string) => void; // <--- HÀM MỚI
+  getSelectedItems: () => CartItem[]; // <--- HÀM MỚI
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -28,34 +33,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // 1. LẮNG NGHE ĐĂNG NHẬP ĐỂ TẢI GIỎ HÀNG VỀ
-  useEffect(() => {
-    const unsubscribe = auth().onAuthStateChanged(async user => {
-      if (user) {
-        // Nếu user đã đăng nhập, tải giỏ hàng từ Firestore về
-        try {
-          const cartDoc = await firestore()
-            .collection('carts')
-            .doc(user.uid)
-            .get();
-          if (cartDoc.exists()) {
-            setCartItems(cartDoc.data()?.items || []);
-            console.log('Đã đồng bộ giỏ hàng từ Firebase!');
-          } else {
-            setCartItems([]);
-          }
-        } catch (error) {
-          console.error('Lỗi tải giỏ hàng:', error);
-        }
-      } else {
-        // Nếu logout, xóa giỏ hàng trên màn hình
-        setCartItems([]);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // HÀM PHỤ: LƯU LÊN FIREBASE (Dùng chung cho Add/Remove/Update)
+  // HÀM PHỤ: LƯU LÊN FIREBASE (Dùng chung cho Add/Remove/Update/Selection)
   const syncToFirebase = async (newCartItems: CartItem[]) => {
     const user = auth().currentUser;
     if (user) {
@@ -70,7 +48,40 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // 2. THÊM SẢN PHẨM (Đã sửa để lưu Firebase)
+  // 1. LẮNG NGHE ĐĂNG NHẬP ĐỂ TẢI GIỎ HÀNG VỀ
+  useEffect(() => {
+    const unsubscribe = auth().onAuthStateChanged(async user => {
+      if (user) {
+        try {
+          const cartDoc = await firestore()
+            .collection('carts')
+            .doc(user.uid)
+            .get();
+          if (cartDoc.exists()) {
+            // Khi tải về, đảm bảo mọi item đều có trường isSelected (mặc định là true)
+            const loadedItems = (
+              (cartDoc.data()?.items as CartItem[]) || []
+            ).map(item => ({
+              ...item,
+              isSelected:
+                item.isSelected !== undefined ? item.isSelected : true,
+            }));
+            setCartItems(loadedItems);
+            console.log('Đã đồng bộ giỏ hàng từ Firebase!');
+          } else {
+            setCartItems([]);
+          }
+        } catch (error) {
+          console.error('Lỗi tải giỏ hàng:', error);
+        }
+      } else {
+        setCartItems([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. THÊM SẢN PHẨM
   const addToCart = (product: any) => {
     setCartItems(prevItems => {
       const existingItem = prevItems.find(item => item.id === product.id);
@@ -79,19 +90,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
       if (existingItem) {
         newCart = prevItems.map(item =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: item.quantity + 1, isSelected: true } // Mặc định chọn khi thêm/tăng
             : item,
         );
       } else {
-        newCart = [...prevItems, { ...product, quantity: 1 }];
+        newCart = [
+          ...prevItems,
+          {
+            ...product,
+            quantity: 1,
+            discount: product.discount || 0,
+            imageUrl: product.imageUrl || product.image,
+            isSelected: true, // <<-- MẶC ĐỊNH LÀ TRUE
+          },
+        ];
       }
 
-      syncToFirebase(newCart); // Lưu ngay
+      syncToFirebase(newCart);
       return newCart;
     });
   };
 
-  // 3. GIẢM SỐ LƯỢNG (Mới thêm)
+  // 3. GIẢM SỐ LƯỢNG
   const decreaseQuantity = (itemId: string) => {
     setCartItems(prevItems => {
       const newCart = prevItems.map(item => {
@@ -100,7 +120,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         return item;
       });
-      syncToFirebase(newCart); // Lưu ngay
+      syncToFirebase(newCart);
       return newCart;
     });
   };
@@ -109,25 +129,51 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
   const removeFromCart = (itemId: string) => {
     setCartItems(prevItems => {
       const newCart = prevItems.filter(item => item.id !== itemId);
-      syncToFirebase(newCart); // Lưu ngay
+      syncToFirebase(newCart);
       return newCart;
     });
   };
 
-  // 5. XÓA SẠCH (SAU KHI MUA)
-  const clearCart = () => {
-    setCartItems([]);
-    const user = auth().currentUser;
-    if (user) {
-      firestore().collection('carts').doc(user.uid).delete();
-    }
+  // 5. [HÀM MỚI] BẬT/TẮT CHỌN SẢN PHẨM
+  const toggleItemSelection = (itemId: string) => {
+    setCartItems(prevItems => {
+      const newCart = prevItems.map(item =>
+        item.id === itemId ? { ...item, isSelected: !item.isSelected } : item,
+      );
+      syncToFirebase(newCart);
+      return newCart;
+    });
   };
 
-  const getTotalPrice = () => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0,
-    );
+  // 6. [HÀM MỚI] LẤY DANH SÁCH MỤC ĐÃ CHỌN
+  const getSelectedItems = () => {
+    return cartItems.filter(item => item.isSelected);
+  };
+
+  // 7. HÀM TÍNH TỔNG TIỀN (Chấp nhận danh sách items đã lọc)
+  const getTotalPrice = (items: CartItem[] = cartItems) => {
+    return items.reduce((total, item) => {
+      const discountRate = item.discount ? item.discount / 100 : 0;
+      const priceAfterDiscount = item.price * (1 - discountRate);
+
+      return total + priceAfterDiscount * item.quantity;
+    }, 0);
+  };
+
+  // 8. XÓA SẠCH (SAU KHI MUA)
+  const clearCart = () => {
+    // Sau khi thanh toán, chỉ xóa các items đã được chọn
+    const remainingItems = cartItems.filter(item => !item.isSelected);
+    setCartItems(remainingItems);
+    syncToFirebase(remainingItems);
+
+    // Nếu không còn item nào, xóa cả doc trên Firebase
+    if (remainingItems.length === 0) {
+      const user = auth().currentUser;
+      if (user) {
+        firestore().collection('carts').doc(user.uid).delete();
+      }
+    }
   };
 
   return (
@@ -139,6 +185,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
         removeFromCart,
         clearCart,
         getTotalPrice,
+        toggleItemSelection, // <--- CUNG CẤP HÀM MỚI
+        getSelectedItems, // <--- CUNG CẤP HÀM MỚI
       }}
     >
       {children}
